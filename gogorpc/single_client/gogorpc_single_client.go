@@ -9,8 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/let-z-go/pbrpc/channel"
+	"github.com/let-z-go/gogorpc/client"
 	"github.com/montanaflynn/stats"
+	"github.com/rpcx-ecosystem/rpcx-benchmark/gogorpc/gogorpc"
 	"github.com/rpcx-ecosystem/rpcx-benchmark/proto"
 	"github.com/smallnest/rpcx/log"
 )
@@ -25,12 +26,13 @@ func main() {
 	m := *total / n
 
 	servers := strings.Split(*host, ",")
+	var serverURLs []string
+	for _, server := range servers {
+		serverURLs = append(serverURLs, "tcp://"+server)
+	}
 	log.Infof("Servers: %+v\n\n", servers)
 
 	log.Infof("concurrency: %d\nrequests per client: %d\n\n", n, m)
-
-	servicePath := "Hello"
-	serviceMethod := "Say"
 
 	args := prepareArgs()
 
@@ -41,26 +43,11 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(n * m)
 
-	opts := channel.Options{}
-	opts.SetMethod(servicePath, serviceMethod).
-		SetRequestFactory(func() channel.Message { return new(proto.BenchmarkMessage) }).
-		SetResponseFactory(func() channel.Message { return new(proto.BenchmarkMessage) })
-	cn := new(channel.Channel).Init(&opts)
-	sap := channel.MakeSimpleServerAddressProvider(servers, 0, 0)
-
-	go func() {
-		log.Info(cn.ConnectAndServe(context.Background(), sap))
-	}()
+	cli := new(client.Client).Init(&client.Options{}, serverURLs...)
 
 	//warmup
 	for j := 0; j < 5; j++ {
-		rpc := channel.RPC{
-			Ctx:         context.Background(),
-			ServiceName: servicePath,
-			MethodName:  serviceMethod,
-			Request:     args,
-		}
-		cn.InvokeRPC(&rpc)
+		gogorpc.MakeHelloStub(cli).Say(context.Background(), args).Invoke()
 	}
 
 	var startWg sync.WaitGroup
@@ -83,22 +70,13 @@ func main() {
 
 			for j := 0; j < m; j++ {
 				t := time.Now().UnixNano()
-				rpc := channel.RPC{
-					Ctx:         context.Background(),
-					ServiceName: servicePath,
-					MethodName:  serviceMethod,
-					Request:     args,
-				}
-				cn.InvokeRPC(&rpc)
+				reply, err := gogorpc.MakeHelloStub(cli).Say(context.Background(), args).Invoke()
 				t = time.Now().UnixNano() - t
 
 				d[i] = append(d[i], t)
 
-				if rpc.Err == nil {
-					reply := rpc.Response.(*proto.BenchmarkMessage)
-					if reply.Field1 == "OK" {
-						atomic.AddUint64(&transOK, 1)
-					}
+				if err == nil && reply.Field1 == "OK" {
+					atomic.AddUint64(&transOK, 1)
 				}
 
 				atomic.AddUint64(&trans, 1)

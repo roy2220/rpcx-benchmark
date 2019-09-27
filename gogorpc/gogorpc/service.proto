@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package example;
+
+import "github.com/rpcx-ecosystem/rpcx-benchmark/proto/benchmark.proto";
+
+service Hello {
+  // Sends a greeting
+  rpc Say (proto.BenchmarkMessage) returns (proto.BenchmarkMessage) {}
+}

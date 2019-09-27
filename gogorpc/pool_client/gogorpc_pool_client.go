@@ -9,8 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/let-z-go/pbrpc/channel"
+	"github.com/let-z-go/gogorpc/client"
 	"github.com/montanaflynn/stats"
+	"github.com/rpcx-ecosystem/rpcx-benchmark/gogorpc/gogorpc"
 	"github.com/rpcx-ecosystem/rpcx-benchmark/proto"
 	"github.com/smallnest/rpcx/log"
 )
@@ -18,6 +19,7 @@ import (
 var concurrency = flag.Int("c", 1, "concurrency")
 var total = flag.Int("n", 1, "total requests for all clients")
 var host = flag.String("s", "127.0.0.1:8972", "server ip and port")
+var pool = flag.Int("pool", 10, " shared rpcx clients instead of rpcxclient-per-conncurrency")
 
 func main() {
 	flag.Parse()
@@ -25,12 +27,13 @@ func main() {
 	m := *total / n
 
 	servers := strings.Split(*host, ",")
+	var serverURLs []string
+	for _, server := range servers {
+		serverURLs = append(serverURLs, "tcp://"+server)
+	}
 	log.Infof("Servers: %+v\n\n", servers)
 
 	log.Infof("concurrency: %d\nrequests per client: %d\n\n", n, m)
-
-	servicePath := "Hello"
-	serviceMethod := "Say"
 
 	args := prepareArgs()
 
@@ -40,6 +43,17 @@ func main() {
 
 	var wg sync.WaitGroup
 	wg.Add(n * m)
+
+	var clientIndex uint64
+	var poolClients = make([]client.Client, *pool)
+	for i := 0; i < *pool; i++ {
+		cli := poolClients[i].Init(&client.Options{}, serverURLs...)
+
+		//warmup
+		for j := 0; j < 5; j++ {
+			gogorpc.MakeHelloStub(cli).Say(context.Background(), args).Invoke()
+		}
+	}
 
 	var startWg sync.WaitGroup
 	startWg.Add(n)
@@ -56,49 +70,22 @@ func main() {
 		d = append(d, dt)
 
 		go func(i int) {
-			opts := channel.Options{}
-			opts.SetMethod(servicePath, serviceMethod).
-				SetRequestFactory(func() channel.Message { return new(proto.BenchmarkMessage) }).
-				SetResponseFactory(func() channel.Message { return new(proto.BenchmarkMessage) })
-			cn := new(channel.Channel).Init(&opts)
-			sap := channel.MakeSimpleServerAddressProvider(servers, 0, 0)
-
-			go func() {
-				log.Info(cn.ConnectAndServe(context.Background(), sap))
-			}()
-
-			//warmup
-			for j := 0; j < 5; j++ {
-				rpc := channel.RPC{
-					Ctx:         context.Background(),
-					ServiceName: servicePath,
-					MethodName:  serviceMethod,
-					Request:     args,
-				}
-				cn.InvokeRPC(&rpc)
-			}
-
 			startWg.Done()
 			startWg.Wait()
 
 			for j := 0; j < m; j++ {
 				t := time.Now().UnixNano()
-				rpc := channel.RPC{
-					Ctx:         context.Background(),
-					ServiceName: servicePath,
-					MethodName:  serviceMethod,
-					Request:     args,
-				}
-				cn.InvokeRPC(&rpc)
+				ci := atomic.AddUint64(&clientIndex, 1)
+				ci = ci % uint64(*pool)
+				cli := &poolClients[int(ci)]
+
+				reply, err := gogorpc.MakeHelloStub(cli).Say(context.Background(), args).Invoke()
 				t = time.Now().UnixNano() - t
 
 				d[i] = append(d[i], t)
 
-				if rpc.Err == nil {
-					reply := rpc.Response.(*proto.BenchmarkMessage)
-					if reply.Field1 == "OK" {
-						atomic.AddUint64(&transOK, 1)
-					}
+				if err == nil && reply.Field1 == "OK" {
+					atomic.AddUint64(&transOK, 1)
 				}
 
 				atomic.AddUint64(&trans, 1)
