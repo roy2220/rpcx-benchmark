@@ -47,7 +47,7 @@ func main() {
 
 	//warmup
 	for j := 0; j < 5; j++ {
-		gogorpc.MakeHelloStub(cli).Say(context.Background(), args).Invoke()
+		new(gogorpc.HelloStub).Init(cli).Say(context.Background(), args)
 	}
 
 	var startWg sync.WaitGroup
@@ -70,7 +70,7 @@ func main() {
 
 			for j := 0; j < m; j++ {
 				t := time.Now().UnixNano()
-				reply, err := gogorpc.MakeHelloStub(cli).Say(context.Background(), args).Invoke()
+				reply, err := new(gogorpc.HelloStub).Init(cli).Say(context.Background(), args)
 				t = time.Now().UnixNano() - t
 
 				d[i] = append(d[i], t)

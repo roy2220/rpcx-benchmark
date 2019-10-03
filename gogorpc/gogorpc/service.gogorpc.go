@@ -43,51 +43,92 @@ func RegisterHelloHandler(serviceHandler HelloHandler) func(*channel.Options) {
 }
 
 type HelloStub struct {
-	rpcPreparer channel.RPCPreparer
+	rpcPreparer     channel.RPCPreparer
+	requestMetadata channel.Metadata
 }
 
-func (self HelloStub) Say(ctx context.Context, request *proto.BenchmarkMessage) *HelloStub_Say {
-	rpc := HelloStub_Say{inner: channel.RPC{
-		Ctx:        ctx,
-		ServiceID:  Hello,
-		MethodName: Hello_Say,
-		Request:    request,
-	}}
-
-	self.rpcPreparer.PrepareRPC(&rpc.inner, func() channel.Message {
-		return new(proto.BenchmarkMessage)
-	})
-
-	return &rpc
-}
-
-func MakeHelloStub(rpcPreparer channel.RPCPreparer) HelloStub {
-	return HelloStub{rpcPreparer}
-}
-
-type HelloStub_Say struct {
-	inner channel.RPC
-}
-
-func (self *HelloStub_Say) WithRequestMetadata(metadata channel.Metadata) *HelloStub_Say {
-	self.inner.RequestMetadata = metadata
+func (self *HelloStub) Init(rpcPreparer channel.RPCPreparer) *HelloStub {
+	self.rpcPreparer = rpcPreparer
 	return self
 }
 
-func (self *HelloStub_Say) Invoke() (*proto.BenchmarkMessage, error) {
-	if self.inner.IsHandled() {
-		self.inner.Reprepare()
-	}
-
-	self.inner.Handle()
-
-	if self.inner.Err != nil {
-		return nil, self.inner.Err
-	}
-
-	return self.inner.Response.(*proto.BenchmarkMessage), nil
+func (self *HelloStub) WithRequestMetadata(metadata channel.Metadata) *HelloStub {
+	self.requestMetadata = metadata
+	return self
 }
 
-func (self *HelloStub_Say) ResponseMetadata() channel.Metadata {
-	return self.inner.ResponseMetadata
+func (self HelloStub) Say(ctx context.Context, request *proto.BenchmarkMessage) (*proto.BenchmarkMessage, error) {
+	rpc := channel.GetPooledRPC()
+
+	*rpc = channel.RPC{
+		Ctx:             ctx,
+		ServiceID:       Hello,
+		MethodName:      Hello_Say,
+		RequestMetadata: self.requestMetadata,
+		Request:         request,
+	}
+
+	self.rpcPreparer.PrepareRPC(rpc, func() channel.Message {
+		return new(proto.BenchmarkMessage)
+	})
+
+	rpc.Handle()
+	response, err := rpc.Response, rpc.Err
+	channel.PutPooledRPC(rpc)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response.(*proto.BenchmarkMessage), nil
+}
+
+func (self HelloStub) MakeSay(ctx context.Context, request *proto.BenchmarkMessage) HelloStub_Say {
+	rpc := channel.GetPooledRPC()
+
+	*rpc = channel.RPC{
+		Ctx:             ctx,
+		ServiceID:       Hello,
+		MethodName:      Hello_Say,
+		RequestMetadata: self.requestMetadata,
+		Request:         request,
+	}
+
+	self.rpcPreparer.PrepareRPC(rpc, func() channel.Message {
+		return new(proto.BenchmarkMessage)
+	})
+
+	return HelloStub_Say{rpc}
+}
+
+type HelloStub_Say struct {
+	rpc *channel.RPC
+}
+
+func (self HelloStub_Say) WithRequestMetadata(metadata channel.Metadata) HelloStub_Say {
+	self.rpc.RequestMetadata = metadata
+	return self
+}
+
+func (self HelloStub_Say) Invoke() (*proto.BenchmarkMessage, error) {
+	if self.rpc.IsHandled() {
+		self.rpc.Reprepare()
+	}
+
+	self.rpc.Handle()
+
+	if self.rpc.Err != nil {
+		return nil, self.rpc.Err
+	}
+
+	return self.rpc.Response.(*proto.BenchmarkMessage), nil
+}
+
+func (self HelloStub_Say) ResponseMetadata() channel.Metadata {
+	return self.rpc.ResponseMetadata
+}
+
+func (self HelloStub_Say) Close() {
+	channel.PutPooledRPC(self.rpc)
+	self.rpc = nil
 }

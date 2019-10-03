@@ -51,7 +51,7 @@ func main() {
 
 		//warmup
 		for j := 0; j < 5; j++ {
-			gogorpc.MakeHelloStub(cli).Say(context.Background(), args).Invoke()
+			new(gogorpc.HelloStub).Init(cli).Say(context.Background(), args)
 		}
 	}
 
@@ -79,7 +79,7 @@ func main() {
 				ci = ci % uint64(*pool)
 				cli := &poolClients[int(ci)]
 
-				reply, err := gogorpc.MakeHelloStub(cli).Say(context.Background(), args).Invoke()
+				reply, err := new(gogorpc.HelloStub).Init(cli).Say(context.Background(), args)
 				t = time.Now().UnixNano() - t
 
 				d[i] = append(d[i], t)
