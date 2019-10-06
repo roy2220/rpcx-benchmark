@@ -43,8 +43,8 @@ func RegisterHelloHandler(serviceHandler HelloHandler) func(*channel.Options) {
 }
 
 type HelloStub struct {
-	rpcPreparer     channel.RPCPreparer
-	requestMetadata channel.Metadata
+	rpcPreparer      channel.RPCPreparer
+	requestExtraData channel.ExtraData
 }
 
 func (self *HelloStub) Init(rpcPreparer channel.RPCPreparer) *HelloStub {
@@ -52,8 +52,8 @@ func (self *HelloStub) Init(rpcPreparer channel.RPCPreparer) *HelloStub {
 	return self
 }
 
-func (self *HelloStub) WithRequestMetadata(metadata channel.Metadata) *HelloStub {
-	self.requestMetadata = metadata
+func (self *HelloStub) WithRequestExtraData(extraData channel.ExtraData) *HelloStub {
+	self.requestExtraData = extraData
 	return self
 }
 
@@ -61,11 +61,11 @@ func (self HelloStub) Say(ctx context.Context, request *proto.BenchmarkMessage) 
 	rpc := channel.GetPooledRPC()
 
 	*rpc = channel.RPC{
-		Ctx:             ctx,
-		ServiceID:       Hello,
-		MethodName:      Hello_Say,
-		RequestMetadata: self.requestMetadata,
-		Request:         request,
+		Ctx:              ctx,
+		ServiceID:        Hello,
+		MethodName:       Hello_Say,
+		RequestExtraData: self.requestExtraData.Ref(true),
+		Request:          request,
 	}
 
 	self.rpcPreparer.PrepareRPC(rpc, func() channel.Message {
@@ -87,11 +87,11 @@ func (self HelloStub) MakeSay(ctx context.Context, request *proto.BenchmarkMessa
 	rpc := channel.GetPooledRPC()
 
 	*rpc = channel.RPC{
-		Ctx:             ctx,
-		ServiceID:       Hello,
-		MethodName:      Hello_Say,
-		RequestMetadata: self.requestMetadata,
-		Request:         request,
+		Ctx:              ctx,
+		ServiceID:        Hello,
+		MethodName:       Hello_Say,
+		RequestExtraData: self.requestExtraData.Ref(true),
+		Request:          request,
 	}
 
 	self.rpcPreparer.PrepareRPC(rpc, func() channel.Message {
@@ -105,8 +105,8 @@ type HelloStub_Say struct {
 	rpc *channel.RPC
 }
 
-func (self HelloStub_Say) WithRequestMetadata(metadata channel.Metadata) HelloStub_Say {
-	self.rpc.RequestMetadata = metadata
+func (self HelloStub_Say) WithRequestExtraData(extraData channel.ExtraDataRef) HelloStub_Say {
+	self.rpc.RequestExtraData = extraData
 	return self
 }
 
@@ -124,8 +124,8 @@ func (self HelloStub_Say) Invoke() (*proto.BenchmarkMessage, error) {
 	return self.rpc.Response.(*proto.BenchmarkMessage), nil
 }
 
-func (self HelloStub_Say) ResponseMetadata() channel.Metadata {
-	return self.rpc.ResponseMetadata
+func (self HelloStub_Say) ResponseExtraData() channel.ExtraDataRef {
+	return self.rpc.ResponseExtraData
 }
 
 func (self HelloStub_Say) Close() {

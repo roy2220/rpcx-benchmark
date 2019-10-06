@@ -26,8 +26,8 @@ type serviceHandler struct{}
 
 func (serviceHandler) Say(ctx context.Context, args *proto.BenchmarkMessage) (*proto.BenchmarkMessage, error) {
 	reply := *args
-	args.Field1 = "OK"
-	args.Field2 = 100
+	reply.Field1 = "OK"
+	reply.Field2 = 100
 	if *delay > 0 {
 		time.Sleep(*delay)
 	} else {
