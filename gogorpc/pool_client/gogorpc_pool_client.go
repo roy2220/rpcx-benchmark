@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"flag"
+	"net/http"
+	_ "net/http/pprof"
 	"reflect"
 	"strings"
 	"sync"
@@ -20,9 +22,13 @@ var concurrency = flag.Int("c", 1, "concurrency")
 var total = flag.Int("n", 1, "total requests for all clients")
 var host = flag.String("s", "127.0.0.1:8972", "server ip and port")
 var pool = flag.Int("pool", 10, " shared rpcx clients instead of rpcxclient-per-conncurrency")
+var debugAddr = flag.String("d", "127.0.0.1:9982", "server ip and port")
 
 func main() {
 	flag.Parse()
+	go func() {
+		log.Info(http.ListenAndServe(*debugAddr, nil))
+	}()
 	n := *concurrency
 	m := *total / n
 

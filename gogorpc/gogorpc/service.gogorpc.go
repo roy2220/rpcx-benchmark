@@ -58,29 +58,10 @@ func (self *HelloStub) WithRequestExtraData(extraData channel.ExtraData) *HelloS
 }
 
 func (self HelloStub) Say(ctx context.Context, request *proto.BenchmarkMessage) (*proto.BenchmarkMessage, error) {
-	rpc := channel.GetPooledRPC()
-
-	*rpc = channel.RPC{
-		Ctx:              ctx,
-		ServiceID:        Hello,
-		MethodName:       Hello_Say,
-		RequestExtraData: self.requestExtraData.Ref(true),
-		Request:          request,
-	}
-
-	self.rpcPreparer.PrepareRPC(rpc, func() channel.Message {
-		return new(proto.BenchmarkMessage)
-	})
-
-	rpc.Handle()
-	response, err := rpc.Response, rpc.Err
-	channel.PutPooledRPC(rpc)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return response.(*proto.BenchmarkMessage), nil
+	rpc := self.MakeSay(ctx, request).Do()
+	response, err := rpc.Result()
+	rpc.Close()
+	return response, err
 }
 
 func (self HelloStub) MakeSay(ctx context.Context, request *proto.BenchmarkMessage) HelloStub_Say {
@@ -110,13 +91,16 @@ func (self HelloStub_Say) WithRequestExtraData(extraData channel.ExtraDataRef) H
 	return self
 }
 
-func (self HelloStub_Say) Invoke() (*proto.BenchmarkMessage, error) {
+func (self HelloStub_Say) Do() HelloStub_Say {
 	if self.rpc.IsHandled() {
 		self.rpc.Reprepare()
 	}
 
 	self.rpc.Handle()
+	return self
+}
 
+func (self HelloStub_Say) Result() (*proto.BenchmarkMessage, error) {
 	if self.rpc.Err != nil {
 		return nil, self.rpc.Err
 	}
@@ -124,11 +108,15 @@ func (self HelloStub_Say) Invoke() (*proto.BenchmarkMessage, error) {
 	return self.rpc.Response.(*proto.BenchmarkMessage), nil
 }
 
-func (self HelloStub_Say) ResponseExtraData() channel.ExtraDataRef {
-	return self.rpc.ResponseExtraData
-}
-
 func (self HelloStub_Say) Close() {
 	channel.PutPooledRPC(self.rpc)
 	self.rpc = nil
+}
+
+func (self HelloStub_Say) RequestExtraData() channel.ExtraDataRef {
+	return self.rpc.RequestExtraData
+}
+
+func (self HelloStub_Say) ResponseExtraData() channel.ExtraDataRef {
+	return self.rpc.ResponseExtraData
 }
